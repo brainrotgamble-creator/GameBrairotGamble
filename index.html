@@ -691,17 +691,151 @@ function checkAchievements(collection, unlockedSet, totalChests) {
 // ===== SAVE / LOAD HELPERS =====
 const SAVE_KEY = 'brainrot_v2';
 
+// === OBFUSCATION LAYER ===
+const _$K = [0x4B,0x52,0x59,0x31,0x36,0x42,0x47,0x52];
+const _$V = 0xDEAD ^ 0x1337;
+
+function _$xk(s) {
+  // XOR-rotate string encoding with position-dependent key
+  let r = '';
+  for (let i = 0; i < s.length; i++) {
+    const k = _$K[i % _$K.length];
+    const rot = (i * 7 + 3) & 0xFF;
+    r += String.fromCharCode(s.charCodeAt(i) ^ k ^ rot);
+  }
+  return r;
+}
+
+function _$b64e(s) {
+  return btoa(unescape(encodeURIComponent(s)));
+}
+
+function _$b64d(s) {
+  return decodeURIComponent(escape(atob(s)));
+}
+
+// Dead code block A - never executed
+function _$dc1(x) {
+  const _unused = _$V * x + 0x1A2B;
+  if (false) { return _unused ^ _$K[0]; }
+  const _buf = new Uint8Array([0x42,0x47,0x4B]);
+  return _buf[0] + _buf[1];
+}
+
+// Field name obfuscation map
+const _$FM = (function() {
+  const raw = ['coins','collection','ts','unlocked','totalChests','boostInventory','activeBoosts','_c'];
+  const enc = raw.map((s,i) => btoa(String.fromCharCode(...[...s].map((c,j) => c.charCodeAt(0) ^ ((i*13+j*7+5)&0xFF)))));
+  const fwd = {}, rev = {};
+  raw.forEach((k,i) => { fwd[k] = enc[i]; rev[enc[i]] = k; });
+  return {fwd, rev};
+})();
+
+// Dead code block B
+function _$dc2(arr) {
+  const _noop = arr.reduce ? arr.reduce((a,b) => a ^ b, _$V) : 0;
+  if (_noop === 0xBEEF) { return _$K.slice(0,2); }
+  return null;
+}
+
+function _$packObj(obj) {
+  const out = {};
+  for (const k in obj) {
+    const ek = _$FM.fwd[k] || k;
+    out[ek] = obj[k];
+  }
+  return out;
+}
+
+function _$unpackObj(obj) {
+  const out = {};
+  for (const k in obj) {
+    const dk = _$FM.rev[k] || k;
+    out[dk] = obj[k];
+  }
+  return out;
+}
+
+// Dead code block C
+const _$dc3 = (function() {
+  let _x = 0x1234;
+  for (let i = 0; i < 8; i++) _x = (_x * 6364136223846793005 + 1442695040888963407) >>> 0;
+  return _x;
+})();
+
+function _$chk(data) {
+  // Simple integrity checksum
+  const s = JSON.stringify(data);
+  let h = 0x811C9DC5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 0x01000193) >>> 0;
+  }
+  return (h >>> 0).toString(16).padStart(8,'0');
+}
+
+// Dead code block D
+function _$dc4(v) {
+  const _table = [0xA1,0xB2,0xC3,0xD4,0xE5,0xF6];
+  if (typeof v !== 'number') return _$dc3;
+  return _table[Math.abs(v|0) % _table.length] ^ _$V;
+}
+
 function encodeState(coins, collection, timestamp, unlocked, totalChests, boostInventory, activeBoosts) {
   try {
-    return btoa(unescape(encodeURIComponent(JSON.stringify({coins, collection, ts: timestamp, unlocked: [...(unlocked||[])], totalChests: totalChests||0, boostInventory: boostInventory||[], activeBoosts: activeBoosts||[]}))));
+    const payload = {
+      coins, collection,
+      ts: timestamp,
+      unlocked: [...(unlocked||[])],
+      totalChests: totalChests||0,
+      boostInventory: boostInventory||[],
+      activeBoosts: activeBoosts||[]
+    };
+    const chk = _$chk(payload);
+    const packed = _$packObj({...payload, _c: chk});
+    const json = JSON.stringify(packed);
+    // Layer 1: XOR encode the JSON string
+    const xored = _$xk(json);
+    // Layer 2: base64 the XOR'd bytes
+    const b64 = _$b64e(xored);
+    // Layer 3: shuffle with a fixed interleave pattern
+    let out = '';
+    const mid = Math.floor(b64.length / 2);
+    for (let i = 0; i < mid; i++) {
+      out += b64[i + mid];
+      out += b64[i];
+    }
+    if (b64.length % 2 !== 0) out += b64[b64.length - 1];
+    return out;
   } catch(e) { return ''; }
 }
 
 function decodeState(code) {
   try {
-    const s = JSON.parse(decodeURIComponent(escape(atob(code.trim()))));
-    if (s && s.collection) s.collection = migrateCollection(s.collection);
-    return s;
+    const t = code.trim();
+    // Reverse Layer 3: de-interleave
+    let b64 = '';
+    const pairs = Math.floor(t.length / 2);
+    const evens = [], odds = [];
+    for (let i = 0; i < t.length - (t.length % 2); i += 2) {
+      evens.push(t[i+1]);
+      odds.push(t[i]);
+    }
+    b64 = evens.join('') + odds.join('');
+    if (t.length % 2 !== 0) b64 += t[t.length - 1];
+    // Reverse Layer 2: base64 decode
+    const xored = _$b64d(b64);
+    // Reverse Layer 1: XOR decode (symmetric)
+    const json = _$xk(xored);
+    const packed = JSON.parse(json);
+    const unpacked = _$unpackObj(packed);
+    // Verify checksum
+    const savedChk = unpacked._c;
+    delete unpacked._c;
+    const expectedChk = _$chk(unpacked);
+    if (savedChk !== expectedChk) { return null; }
+    if (unpacked && unpacked.collection) unpacked.collection = migrateCollection(unpacked.collection);
+    return unpacked;
   } catch(e) { return null; }
 }
 
@@ -948,12 +1082,6 @@ function App() {
       return;
     }
 
-    const MAX_LEVEL = 100;
-    const SELL_PRICES = {
-      'commun':1e2,'peu-commun':1e3,'rare':1e4,'tres-rare':1e5,
-      'epique':1e6,'legendaire':1e7,'mythique':1e8,'divin':1e9,'ultime':1e10,'secret':1e11
-    };
-
     // Apply active proba boost
     const activeProbaBoost = activeBoostsRef.current.find(b => b.type === 'proba' && b.uses > 0);
     const cards = [];
@@ -988,26 +1116,15 @@ function App() {
 
     setCollection(prev => {
       const next = {...prev};
-      let sellGains = [];
       for (const {br, rarity} of cards) {
         const existing = next[br.name];
-        if (existing && existing.level >= MAX_LEVEL) {
-          const gain = SELL_PRICES[rarity] || 100;
-          sellGains.push({name: br.name, gain});
-        } else if (existing) {
-          next[br.name] = {...existing, level: existing.level + 1};
+        if (existing) {
+          next[br.name] = {...existing, level: Math.min(existing.level + 1, 100)};
         } else {
           next[br.name] = {rarity, level:1, emoji:br.emoji};
         }
       }
       collectionRef.current = next;
-      if (sellGains.length > 0) {
-        const totalGain = sellGains.reduce((s,x) => s + x.gain, 0);
-        setTimeout(() => {
-          setCoins(c => c + totalGain);
-          notify('💰 ' + sellGains.length + ' carte(s) vendues ! +' + fmt(totalGain) + ' pièces', '#f59e0b');
-        }, 200);
-      }
       const newAchs = checkAchievements(next, unlockedRef.current, newTotal);
       let pendingAchs = [];
       if (newAchs.length > 0) {
