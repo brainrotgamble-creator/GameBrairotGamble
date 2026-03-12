@@ -4,8 +4,46 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BrainRot Gamble</title>
+    <link rel="icon" href="https://raw.githubusercontent.com/brainrotgamble-creator/GameBrairotGamble/refs/heads/main/logotestBrainrot.png" type="image/x-icon">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<!-- ===== FIREBASE ===== -->
+<script type="module">
+  import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
+  import { getFirestore, collection, getDocs, addDoc, query, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+
+  // 🔧 REMPLACE CES VALEURS PAR TA CONFIG FIREBASE
+const firebaseConfig = {
+  apiKey: "AIzaSyAtoi-AS7QlZDLyAuGg_G1BqDeHScQfcAM",
+  authDomain: "brainrot-gamble-e7463.firebaseapp.com",
+  projectId: "brainrot-gamble-e7463",
+  storageBucket: "brainrot-gamble-e7463.firebasestorage.app",
+  messagingSenderId: "1065562519897",
+  appId: "1:1065562519897:web:37d72dec694d82565ef448"
+};
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+
+  window._fbGetLeaderboard = async function(tab) {
+    const field = tab === 'level' ? 'totalLevel' : 'perSec';
+    const q = query(collection(db, 'leaderboard'), orderBy(field, 'desc'), limit(20));
+    const snap = await getDocs(q);
+    return snap.docs.map((d, i) => ({rank: i+1, ...d.data(), id: d.id}));
+  };
+
+  window._fbSubmitScore = async function(name, coins, perSec, totalLevel) {
+    await addDoc(collection(db, 'leaderboard'), {
+      name: name.trim().slice(0, 24),
+      coins,
+      perSec,
+      totalLevel,
+      submittedAt: serverTimestamp()
+    });
+  };
+
+  window._firebaseReady = true;
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@700;900&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -70,6 +108,73 @@ body {
   cursor:pointer; transition:all 0.2s; margin-left:8px;
 }
 .save-btn-header:hover { background:rgba(255,255,255,0.15); color:white; }
+
+/* ===== LEADERBOARD ===== */
+.lb-btn-header {
+  background:linear-gradient(135deg,rgba(255,215,0,0.12),rgba(255,165,0,0.08));
+  border:1px solid rgba(255,215,0,0.35);
+  border-radius:20px; padding:6px 14px;
+  font-family:'Fredoka One',cursive; font-size:0.85em; color:#ffd700;
+  cursor:pointer; transition:all 0.2s;
+}
+.lb-btn-header:hover { background:rgba(255,215,0,0.22); color:#ffe55c; }
+.lb-modal-bg {
+  position:fixed; inset:0; background:rgba(0,0,0,0.88); z-index:500;
+  display:flex; align-items:center; justify-content:center; padding:20px;
+}
+.lb-modal {
+  background:#0f0f2e; border:2px solid #ffd700;
+  border-radius:20px; padding:28px 24px; max-width:520px; width:100%;
+  max-height:85vh; overflow-y:auto;
+  box-shadow:0 0 50px rgba(255,215,0,0.18);
+}
+.lb-modal h2 { font-size:1.55em; margin-bottom:6px; color:#ffd700; text-align:center; }
+.lb-subtitle { color:rgba(255,255,255,0.4); font-size:0.78em; text-align:center; margin-bottom:18px; }
+.lb-row {
+  display:flex; align-items:center; gap:12px;
+  padding:10px 14px; border-radius:12px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid rgba(255,255,255,0.07);
+  margin-bottom:8px; transition:background 0.15s;
+}
+.lb-row:hover { background:rgba(255,255,255,0.08); }
+.lb-row.top1 { background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,180,0,0.06)); border-color:rgba(255,215,0,0.4); }
+.lb-row.top2 { background:linear-gradient(135deg,rgba(192,192,192,0.13),rgba(180,180,180,0.05)); border-color:rgba(192,192,192,0.3); }
+.lb-row.top3 { background:linear-gradient(135deg,rgba(205,127,50,0.13),rgba(180,100,30,0.05)); border-color:rgba(205,127,50,0.3); }
+.lb-rank { font-size:1.3em; min-width:32px; text-align:center; }
+.lb-name { font-size:1em; flex:1; color:white; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.lb-stats { font-size:0.78em; color:rgba(255,255,255,0.5); text-align:right; line-height:1.5; }
+.lb-ps { color:#22c55e; font-size:0.9em; font-weight:bold; }
+.lb-divider { border:none; border-top:1px solid rgba(255,255,255,0.08); margin:16px 0; }
+.lb-input {
+  width:100%; background:#1a1a3e; border:1px solid rgba(255,215,0,0.3);
+  border-radius:10px; color:white; font-family:'Fredoka One',cursive;
+  font-size:1em; padding:10px 14px; margin-bottom:10px;
+}
+.lb-input:focus { outline:none; border-color:#ffd700; }
+.lb-input::placeholder { color:rgba(255,255,255,0.3); }
+.lb-submit-btn {
+  width:100%; background:linear-gradient(135deg,#b8860b,#ffd700);
+  border:none; border-radius:12px; padding:11px 0;
+  font-family:'Fredoka One',cursive; font-size:1.05em; color:#1a0a00;
+  cursor:pointer; transition:all 0.2s; margin-bottom:8px;
+}
+.lb-submit-btn:hover:not(:disabled) { transform:scale(1.02); filter:brightness(1.1); }
+.lb-submit-btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
+.lb-close-btn {
+  width:100%; background:rgba(255,255,255,0.07); border:1px solid rgba(255,255,255,0.15);
+  border-radius:12px; padding:9px 0; font-family:'Fredoka One',cursive;
+  font-size:0.95em; color:rgba(255,255,255,0.6); cursor:pointer; transition:all 0.2s;
+}
+.lb-close-btn:hover { background:rgba(255,255,255,0.14); color:white; }
+.lb-empty { text-align:center; padding:30px 0; color:rgba(255,255,255,0.3); font-size:1em; }
+.lb-loading { text-align:center; padding:30px 0; font-size:2em; animation:pulse 1s infinite; }
+.lb-success { text-align:center; color:#22c55e; font-size:0.95em; margin-bottom:10px; }
+.lb-firebase-warn {
+  background:rgba(239,68,68,0.12); border:1px solid rgba(239,68,68,0.35);
+  border-radius:10px; padding:10px 14px; margin-bottom:14px;
+  color:#fca5a5; font-size:0.78em; text-align:center; line-height:1.6;
+}
 
 .save-bubble-wrap {
   display:inline-flex; align-items:center; position:relative; margin-left:4px;
@@ -894,6 +999,14 @@ function App() {
   const [boostInventory, setBoostInventory] = useState(initData.boostInventory || []);
   const [activeBoosts, setActiveBoosts]     = useState(initData.activeBoosts   || []);
   const [pendingCoinBoost, setPendingCoinBoost] = useState(null); // boost en attente de sélection BrainRot
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  const [lbData, setLbData]         = useState([]);
+  const [lbLoading, setLbLoading]   = useState(false);
+  const [lbName, setLbName]         = useState('');
+  const [lbSubmitting, setLbSubmitting] = useState(false);
+  const [lbSubmitted, setLbSubmitted]   = useState(false);
+  const [lbError, setLbError]       = useState('');
+  const [lbTab, setLbTab]           = useState('perSec');
   const coinsRef = useRef(initData.coins);
   const collectionRef = useRef(initData.collection);
   const unlockedRef = useRef(cleanInitUnlocked);
@@ -1233,10 +1346,52 @@ function App() {
     notify('🔄 Partie réinitialisée.', '#f97316');
   }
 
+  async function handleOpenLeaderboard() {
+    setShowLeaderboard(true);
+    setLbSubmitted(false);
+    setLbError('');
+    setLbTab('perSec');
+    await loadLeaderboard('perSec');
+  }
+
+  async function loadLeaderboard(tab) {
+    setLbLoading(true);
+    setLbData([]);
+    setLbError('');
+    try {
+      if (!window._firebaseReady) throw new Error('Firebase non configuré');
+      const rows = await window._fbGetLeaderboard(tab);
+      setLbData(rows);
+    } catch(e) {
+      setLbError(e.message || 'Erreur Firebase');
+    } finally {
+      setLbLoading(false);
+    }
+  }
+
+  async function handleSubmitScore() {
+    if (!lbName.trim()) return;
+    setLbSubmitting(true);
+    setLbError('');
+    try {
+      if (!window._firebaseReady) throw new Error('Firebase non configuré');
+      const totalLevel = Object.values(collection).reduce((s,d) => s + (d.level||1), 0);
+      await window._fbSubmitScore(lbName, Math.floor(coins), Math.floor(perSec), totalLevel);
+      setLbSubmitted(true);
+      const rows = await window._fbGetLeaderboard(lbTab);
+      setLbData(rows);
+    } catch(e) {
+      setLbError(e.message || 'Erreur lors de la soumission');
+    } finally {
+      setLbSubmitting(false);
+    }
+  }
+
   return React.createElement(React.Fragment, null,
     React.createElement('div', {className:'header'},
       React.createElement('div', {className:'header-title rainbow-text'}, '🧠 BrainRot Gamble'),
       React.createElement('div', {style:{display:'flex',alignItems:'center',gap:'10px'}},
+        React.createElement('button', {className:'lb-btn-header', onClick: handleOpenLeaderboard}, '🏆 Classement'),
         React.createElement('div', {className:'save-bubble-wrap'},
           React.createElement('button', {className:'save-btn-header', onClick: handleOpenSave}, '💾 Sauv.'),
           React.createElement('svg', {
@@ -1311,7 +1466,103 @@ function App() {
       )
     ),
 
-    notifs.map(n => React.createElement('div', {key:n.id, className:'notif', style:{borderColor:n.color}}, n.msg))
+    notifs.map(n => React.createElement('div', {key:n.id, className:'notif', style:{borderColor:n.color}}, n.msg)),
+
+    // ===== LEADERBOARD MODAL =====
+    showLeaderboard && React.createElement('div', {className:'lb-modal-bg', onClick: e => { if(e.target.className==='lb-modal-bg') setShowLeaderboard(false); }},
+      React.createElement('div', {className:'lb-modal'},
+        React.createElement('h2', null, '🏆 Classement'),
+
+        // Tabs
+        React.createElement('div', {style:{display:'flex', gap:8, margin:'10px 0 18px'}},
+          React.createElement('button', {
+            onClick: () => { setLbTab('perSec'); loadLeaderboard('perSec'); },
+            style:{
+              flex:1, padding:'9px 0', border:'none', cursor:'pointer',
+              borderRadius:10, fontFamily:"'Fredoka One',cursive", fontSize:14,
+              background: lbTab==='perSec' ? 'linear-gradient(135deg,#b8860b,#ffd700)' : '#1a1a2e',
+              color: lbTab==='perSec' ? '#1a0a00' : '#888',
+              boxShadow: lbTab==='perSec' ? '0 2px 12px rgba(255,215,0,0.4)' : 'none'
+            }
+          }, '⚡ Pièces/sec'),
+          React.createElement('button', {
+            onClick: () => { setLbTab('level'); loadLeaderboard('level'); },
+            style:{
+              flex:1, padding:'9px 0', border:'none', cursor:'pointer',
+              borderRadius:10, fontFamily:"'Fredoka One',cursive", fontSize:14,
+              background: lbTab==='level' ? 'linear-gradient(135deg,#7c3aed,#a855f7)' : '#1a1a2e',
+              color: lbTab==='level' ? '#fff' : '#888',
+              boxShadow: lbTab==='level' ? '0 2px 12px rgba(168,85,247,0.4)' : 'none'
+            }
+          }, '⬆️ Niveaux totaux')
+        ),
+
+        React.createElement('div', {className:'lb-subtitle'},
+          lbTab==='perSec'
+            ? 'Top 20 — classé par pièces/sec'
+            : 'Top 20 — classé par somme des niveaux de BrainRot'
+        ),
+
+        // Firebase not configured warning
+        lbError && lbError.includes('non configuré') && React.createElement('div', {className:'lb-firebase-warn'},
+          '⚠️ Firebase non configuré. Suis le guide ci-dessous pour activer le classement en ligne.'
+        ),
+
+        // Other errors
+        lbError && !lbError.includes('non configuré') && React.createElement('div', {className:'lb-firebase-warn'},
+          '❌ ' + lbError
+        ),
+
+        // Leaderboard rows
+        lbLoading && React.createElement('div', {className:'lb-loading'}, '⏳'),
+        !lbLoading && lbData.length === 0 && !lbError && React.createElement('div', {className:'lb-empty'}, '😶 Personne encore… Sois le premier !'),
+        !lbLoading && lbData.map((row, i) => {
+          const medals = ['🥇','🥈','🥉'];
+          const rankEl = i < 3 ? medals[i] : '#' + row.rank;
+          const cls = 'lb-row' + (i===0?' top1':i===1?' top2':i===2?' top3':'');
+          return React.createElement('div', {key: row.id || i, className: cls},
+            React.createElement('div', {className:'lb-rank'}, rankEl),
+            React.createElement('div', {className:'lb-name'}, row.name || 'Joueur'),
+            React.createElement('div', {className:'lb-stats'},
+              lbTab === 'perSec'
+                ? React.createElement(React.Fragment, null,
+                    React.createElement('div', {className:'lb-ps'}, '⚡ ' + fmt(Math.floor(row.perSec||0)) + '/sec'),
+                    React.createElement('div', null, '🪙 ' + fmt(Math.floor(row.coins||0)))
+                  )
+                : React.createElement(React.Fragment, null,
+                    React.createElement('div', {style:{color:'#a855f7', fontWeight:'bold', fontSize:'0.9em'}}, '⬆️ Niv. ' + fmt(row.totalLevel||0)),
+                    React.createElement('div', null, '⚡ ' + fmt(Math.floor(row.perSec||0)) + '/sec')
+                  )
+            )
+          );
+        }),
+
+        React.createElement('hr', {className:'lb-divider'}),
+
+        // Submit form
+        !lbSubmitted && React.createElement(React.Fragment, null,
+          React.createElement('div', {style:{color:'rgba(255,255,255,0.6)', fontSize:'0.82em', marginBottom:8, textAlign:'center'}},
+            '📤 Mon score : ⚡ ' + fmt(Math.floor(perSec)) + '/sec — ⬆️ Niv. total : ' + fmt(Object.values(collection).reduce((s,d)=>s+(d.level||1),0))
+          ),
+          React.createElement('input', {
+            className:'lb-input',
+            placeholder:'Ton pseudo (ex: XxBrainRotKingxX)',
+            value: lbName,
+            onChange: e => setLbName(e.target.value),
+            maxLength: 24,
+            onKeyDown: e => e.key === 'Enter' && handleSubmitScore()
+          }),
+          React.createElement('button', {
+            className:'lb-submit-btn',
+            disabled: !lbName.trim() || lbSubmitting,
+            onClick: handleSubmitScore
+          }, lbSubmitting ? '⏳ Envoi...' : '🚀 Publier mon score !')
+        ),
+        lbSubmitted && React.createElement('div', {className:'lb-success'}, '✅ Score publié ! Bonne chance dans le classement 🎉'),
+
+        React.createElement('button', {className:'lb-close-btn', onClick: () => setShowLeaderboard(false)}, '✖ Fermer')
+      )
+    )
   );
 }
 
