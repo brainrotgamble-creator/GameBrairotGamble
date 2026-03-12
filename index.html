@@ -4,13 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BrainRot Gamble</title>
-    <link rel="icon" href="https://raw.githubusercontent.com/brainrotgamble-creator/GameBrairotGamble/refs/heads/main/logotestBrainrot.png" type="image/x-icon">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <!-- ===== FIREBASE ===== -->
 <script type="module">
   import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-  import { getFirestore, collection, getDocs, addDoc, query, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
+  import { getFirestore, collection, getDocs, setDoc, doc, getDoc, query, orderBy, limit, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js';
 
   // 🔧 REMPLACE CES VALEURS PAR TA CONFIG FIREBASE
 const firebaseConfig = {
@@ -27,13 +26,18 @@ const firebaseConfig = {
 
   window._fbGetLeaderboard = async function(tab) {
     const field = tab === 'level' ? 'totalLevel' : 'perSec';
-    const q = query(collection(db, 'leaderboard'), orderBy(field, 'desc'), limit(20));
+    const q = query(collection(db, 'leaderboard'), orderBy(field, 'desc'), limit(50));
     const snap = await getDocs(q);
     return snap.docs.map((d, i) => ({rank: i+1, ...d.data(), id: d.id}));
   };
 
-  window._fbSubmitScore = async function(name, coins, perSec, totalLevel) {
-    await addDoc(collection(db, 'leaderboard'), {
+  window._fbGetPlayerDoc = async function(playerId) {
+    const snap = await getDoc(doc(db, 'leaderboard', playerId));
+    return snap.exists() ? snap.data() : null;
+  };
+
+  window._fbSubmitScore = async function(playerId, name, coins, perSec, totalLevel) {
+    await setDoc(doc(db, 'leaderboard', playerId), {
       name: name.trim().slice(0, 24),
       coins,
       perSec,
@@ -465,6 +469,8 @@ body {
 <script>
 const { useState, useEffect, useRef } = React;
 
+const HIDDEN_RARITIES = ['STI'];
+
 const RARITIES = {
   'commun':     { label:'Commun',     color:'#9ca3af', gain:2    },
   'peu-commun': { label:'Peu Commun', color:'#22c55e', gain:4    },
@@ -476,9 +482,9 @@ const RARITIES = {
   'divin':      { label:'Divin',      color:'#fbbf24', gain:256  },
   'ultime':     { label:'Ultime',     color:'#22d3ee', gain:512  },
   'secret':     { label:'Secret',     color:'#d1d5db', gain:1024 },
-  'ancestral':  { label:'Ancestral',  color:'#a78bfa', gain:2048  },
-  'eternel':    { label:'Éternel',    color:'#f0abfc', gain:4096  },
-  'STI':        { label:'STI',        color:'#ffffff', gain:8192  },
+  'ancestral':  { label:'Ancestral',  color:'#a78bfa', gain:2048 },
+  'eternel':    { label:'Éternel',    color:'#f0abfc', gain:4096 },
+  'STI':        { label:'STI',        color:'#ffffff', gain:8192 },
 };
 
 const BRAINROTS = {
@@ -609,9 +615,9 @@ const CHESTS = [
   {id:'rare',       name:'Coffre Rare',       price:100000,     emoji:'💎', proba:{'commun':30,'peu-commun':25,'rare':18,'tres-rare':13,'epique':10,'legendaire':4}},
   {id:'epique',     name:'Coffre Épique',     price:1000000,    emoji:'✨', proba:{'commun':25,'peu-commun':20,'rare':20,'tres-rare':15,'epique':12,'legendaire':6,'mythique':2}},
   {id:'mythique',   name:'Coffre Mythique',   price:100000000,  emoji:'🔥', proba:{'commun':20,'peu-commun':15,'rare':13,'tres-rare':12,'epique':18,'legendaire':10,'mythique':8,'divin':4}},
-  {id:'ultime',     name:'Coffre Ultime',     price:1000000000,  emoji:'👑', proba:{'commun':10,'peu-commun':15,'rare':15,'tres-rare':15,'epique':15,'legendaire':10.5,'mythique':9,'divin':7,'ultime':3,'secret':0.5}},
-  {id:'universe',  name:'Coffre Universe',   price:10000000000, emoji:'🌌', proba:{'rare':25,'tres-rare':15,'epique':15,'legendaire':15.5,'mythique':13,'divin':10,'ultime':5,'secret':1,'ancestral':0.5}},
-  {id:'transcendant', name:'Coffre Transcendant', price:100000000000, emoji:'🌠', proba:{'epique':23.4,'legendaire':30,'mythique':20,'divin':15,'ultime':7,'secret':3,'ancestral':1,'eternel':0.5,'STI':0.1}},
+  {id:'ultime',     name:'Coffre Ultime',     price:1000000000,   emoji:'👑', proba:{'commun':10,'peu-commun':15,'rare':15,'tres-rare':15,'epique':15,'legendaire':10.5,'mythique':9,'divin':7,'ultime':3,'secret':0.5}},
+  {id:'universe',   name:'Coffre Universe',   price:10000000000,  emoji:'🌌', proba:{'rare':25,'tres-rare':15,'epique':15,'legendaire':15.5,'mythique':13,'divin':10,'ultime':5,'secret':1,'ancestral':0.5}},
+  {id:'transcendant',name:'Coffre Transcendant',price:100000000000,emoji:'🌠', proba:{'epique':23.4,'legendaire':30,'mythique':20,'divin':15,'ultime':7,'secret':3,'ancestral':1,'eternel':0.5,'STI':0.1}},
 ];
 
 // ===== BOOST SYSTEM =====
@@ -1012,7 +1018,15 @@ function App() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [lbData, setLbData]         = useState([]);
   const [lbLoading, setLbLoading]   = useState(false);
-  const [lbName, setLbName]         = useState('');
+  // UUID persistant du joueur
+  const [playerId] = useState(() => {
+    let id = '';
+    try { id = localStorage.getItem('brainrot_player_id') || ''; } catch(e) {}
+    if (!id) { id = 'p_' + Math.random().toString(36).slice(2) + Date.now().toString(36); try { localStorage.setItem('brainrot_player_id', id); } catch(e) {} }
+    return id;
+  });
+  const [playerName, setPlayerName] = useState(() => { try { return localStorage.getItem('brainrot_player_name') || ''; } catch(e) { return ''; } });
+  const [lbName, setLbName]         = useState(() => { try { return localStorage.getItem('brainrot_player_name') || ''; } catch(e) { return ''; } });
   const [lbSubmitting, setLbSubmitting] = useState(false);
   const [lbSubmitted, setLbSubmitted]   = useState(false);
   const [lbError, setLbError]       = useState('');
@@ -1386,7 +1400,14 @@ function App() {
     try {
       if (!window._firebaseReady) throw new Error('Firebase non configuré');
       const totalLevel = Object.values(collection).reduce((s,d) => s + (d.level||1), 0);
-      await window._fbSubmitScore(lbName, Math.floor(coins), Math.floor(perSec), totalLevel);
+      // Vérifie si le joueur existe déjà pour verrouiller le pseudo
+      const existing = await window._fbGetPlayerDoc(playerId);
+      const finalName = existing ? existing.name : lbName.trim();
+      await window._fbSubmitScore(playerId, finalName, Math.floor(coins), Math.floor(perSec), totalLevel);
+      // Sauvegarde le pseudo localement
+      try { localStorage.setItem('brainrot_player_name', finalName); } catch(e) {}
+      setPlayerName(finalName);
+      setLbName(finalName);
       setLbSubmitted(true);
       const rows = await window._fbGetLeaderboard(lbTab);
       setLbData(rows);
@@ -1509,8 +1530,8 @@ function App() {
 
         React.createElement('div', {className:'lb-subtitle'},
           lbTab==='perSec'
-            ? 'Top 20 — classé par pièces/sec'
-            : 'Top 20 — classé par somme des niveaux de BrainRot'
+            ? 'Top 50 — classé par pièces/sec'
+            : 'Top 50 — classé par somme des niveaux de BrainRot'
         ),
 
         // Firebase not configured warning
@@ -1526,26 +1547,39 @@ function App() {
         // Leaderboard rows
         lbLoading && React.createElement('div', {className:'lb-loading'}, '⏳'),
         !lbLoading && lbData.length === 0 && !lbError && React.createElement('div', {className:'lb-empty'}, '😶 Personne encore… Sois le premier !'),
-        !lbLoading && lbData.map((row, i) => {
+        !lbLoading && (() => {
           const medals = ['🥇','🥈','🥉'];
-          const rankEl = i < 3 ? medals[i] : '#' + row.rank;
-          const cls = 'lb-row' + (i===0?' top1':i===1?' top2':i===2?' top3':'');
-          return React.createElement('div', {key: row.id || i, className: cls},
-            React.createElement('div', {className:'lb-rank'}, rankEl),
-            React.createElement('div', {className:'lb-name'}, row.name || 'Joueur'),
-            React.createElement('div', {className:'lb-stats'},
-              lbTab === 'perSec'
-                ? React.createElement(React.Fragment, null,
-                    React.createElement('div', {className:'lb-ps'}, '⚡ ' + fmt(Math.floor(row.perSec||0)) + '/sec'),
-                    React.createElement('div', null, '🪙 ' + fmt(Math.floor(row.coins||0)))
-                  )
-                : React.createElement(React.Fragment, null,
-                    React.createElement('div', {style:{color:'#a855f7', fontWeight:'bold', fontSize:'0.9em'}}, '⬆️ Niv. ' + fmt(row.totalLevel||0)),
-                    React.createElement('div', null, '⚡ ' + fmt(Math.floor(row.perSec||0)) + '/sec')
-                  )
-            )
-          );
-        }),
+          const rows = [];
+          for (let i = 0; i < 50; i++) {
+            const row = lbData[i];
+            const rankEl = i < 3 ? medals[i] : '#' + (i + 1);
+            const cls = 'lb-row' + (i===0?' top1':i===1?' top2':i===2?' top3':'');
+            if (row) {
+              rows.push(React.createElement('div', {key: row.id || i, className: cls},
+                React.createElement('div', {className:'lb-rank'}, rankEl),
+                React.createElement('div', {className:'lb-name'}, row.name || 'Joueur'),
+                React.createElement('div', {className:'lb-stats'},
+                  lbTab === 'perSec'
+                    ? React.createElement(React.Fragment, null,
+                        React.createElement('div', {className:'lb-ps'}, '⚡ ' + fmt(Math.floor(row.perSec||0)) + '/sec'),
+                        React.createElement('div', null, '🪙 ' + fmt(Math.floor(row.coins||0)))
+                      )
+                    : React.createElement(React.Fragment, null,
+                        React.createElement('div', {style:{color:'#a855f7', fontWeight:'bold', fontSize:'0.9em'}}, '⬆️ Niv. ' + fmt(row.totalLevel||0)),
+                        React.createElement('div', null, '⚡ ' + fmt(Math.floor(row.perSec||0)) + '/sec')
+                      )
+                )
+              ));
+            } else if (lbData.length > 0) {
+              rows.push(React.createElement('div', {key:'empty-'+i, className: cls, style:{opacity:0.25}},
+                React.createElement('div', {className:'lb-rank'}, rankEl),
+                React.createElement('div', {className:'lb-name', style:{color:'rgba(255,255,255,0.3)', fontStyle:'italic'}}, '— vide —'),
+                React.createElement('div', {className:'lb-stats'}, '')
+              ));
+            }
+          }
+          return rows;
+        })(),
 
         React.createElement('hr', {className:'lb-divider'}),
 
@@ -1554,21 +1588,53 @@ function App() {
           React.createElement('div', {style:{color:'rgba(255,255,255,0.6)', fontSize:'0.82em', marginBottom:8, textAlign:'center'}},
             '📤 Mon score : ⚡ ' + fmt(Math.floor(perSec)) + '/sec — ⬆️ Niv. total : ' + fmt(Object.values(collection).reduce((s,d)=>s+(d.level||1),0))
           ),
-          React.createElement('input', {
-            className:'lb-input',
-            placeholder:'Ton pseudo (ex: XxBrainRotKingxX)',
-            value: lbName,
-            onChange: e => setLbName(e.target.value),
-            maxLength: 24,
-            onKeyDown: e => e.key === 'Enter' && handleSubmitScore()
-          }),
+          playerName
+            ? React.createElement('div', {style:{
+                background:'rgba(168,85,247,0.1)', border:'1px solid rgba(168,85,247,0.3)',
+                borderRadius:10, padding:'10px 14px', marginBottom:10,
+                display:'flex', alignItems:'center', justifyContent:'space-between'
+              }},
+                React.createElement('span', {style:{color:'white', fontSize:'0.95em'}}, '🎮 ' + playerName),
+                React.createElement('span', {style:{color:'rgba(255,255,255,0.4)', fontSize:'0.75em'}}, '🔒 Pseudo verrouillé')
+              )
+            : React.createElement(React.Fragment, null,
+                React.createElement('div', {style:{
+                  background:'linear-gradient(135deg,rgba(239,68,68,0.18),rgba(239,68,68,0.08))',
+                  border:'2px solid rgba(239,68,68,0.55)',
+                  borderRadius:12, padding:'12px 16px', marginBottom:12,
+                  color:'#fca5a5', fontSize:'0.82em', textAlign:'center', lineHeight:1.7,
+                  boxShadow:'0 0 16px rgba(239,68,68,0.2)'
+                }},
+                  React.createElement('div', {style:{fontSize:'1.3em', marginBottom:4}}, '🔒'),
+                  React.createElement('strong', {style:{color:'#ff6b6b', fontSize:'1.05em', display:'block', marginBottom:4}},
+                    'PSEUDO DÉFINITIF'
+                  ),
+                  'Le pseudo que tu choisis ici est ',
+                  React.createElement('strong', {style:{color:'#ff6b6b'}}, 'permanent'),
+                  ' et ',
+                  React.createElement('strong', {style:{color:'#ff6b6b'}}, 'ne pourra plus jamais être modifié'),
+                  ' une fois publié. Choisis-le bien !'
+                ),
+                React.createElement('input', {
+                  className:'lb-input',
+                  placeholder:'Ton pseudo (ex: XxBrainRotKingxX)',
+                  value: lbName,
+                  onChange: e => setLbName(e.target.value),
+                  maxLength: 24,
+                  onKeyDown: e => e.key === 'Enter' && handleSubmitScore()
+                })
+              ),
           React.createElement('button', {
             className:'lb-submit-btn',
-            disabled: !lbName.trim() || lbSubmitting,
+            disabled: (!lbName.trim() && !playerName) || lbSubmitting,
             onClick: handleSubmitScore
-          }, lbSubmitting ? '⏳ Envoi...' : '🚀 Publier mon score !')
+          }, lbSubmitting ? '⏳ Envoi...' : playerName ? '🔄 Mettre à jour mon score' : '🚀 Publier mon score !')
         ),
-        lbSubmitted && React.createElement('div', {className:'lb-success'}, '✅ Score publié ! Bonne chance dans le classement 🎉'),
+        lbSubmitted && React.createElement('div', {className:'lb-success'},
+          playerName
+            ? '✅ Score mis à jour ! Tu grimpes dans le classement 📈'
+            : '✅ Score publié ! Bonne chance dans le classement 🎉'
+        ),
 
         React.createElement('button', {className:'lb-close-btn', onClick: () => setShowLeaderboard(false)}, '✖ Fermer')
       )
@@ -1671,7 +1737,7 @@ function ShopScreen({coins, setScreen, onOpen, activeBoosts}) {
             onClick: () => setPickModal(chest)
           }, coins >= chest.price ? '🎁 Ouvrir !' : '🔒 Insuffisant'),
           React.createElement('div', {className:'chest-proba'},
-            Object.entries(chest.proba).filter(([r]) => r !== 'STI').map(([r,p]) => {
+            Object.entries(chest.proba).filter(([r]) => !HIDDEN_RARITIES.includes(r)).map(([r,p]) => {
               const isCommun = r === 'commun';
               const isBoostTarget = activeProbaBoost && r === activeProbaBoost.rarity;
               // reduction only applies if the chest has both commun AND the boost target rarity
