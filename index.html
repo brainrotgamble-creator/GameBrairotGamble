@@ -456,6 +456,8 @@ body {
 .bg-mythique  { background:linear-gradient(135deg,#2e0a0a,#3e0f0f); border:2px solid #ef4444; box-shadow:0 5px 20px rgba(239,68,68,0.25); }
 .bg-divin     { background:linear-gradient(135deg,#2e2a0a,#3e350f); border:2px solid #fbbf24; box-shadow:0 5px 20px rgba(251,191,36,0.3); }
 .bg-ultime    { background:linear-gradient(135deg,#0a2e3e,#0f3a4e); border:2px solid #06b6d4; box-shadow:0 5px 20px rgba(6,182,212,0.3); }
+.bg-universe  { background:linear-gradient(135deg,#0a0a2e,#1a0a3e); border:2px solid #818cf8; box-shadow:0 5px 20px rgba(129,140,248,0.4); }
+.bg-transcendant { background:linear-gradient(135deg,#1a0a2e,#2a0a4e); border:2px solid #e879f9; box-shadow:0 5px 25px rgba(232,121,249,0.5); }
 </style>
 </head>
 <body>
@@ -474,10 +476,16 @@ const RARITIES = {
   'divin':      { label:'Divin',      color:'#fbbf24', gain:256  },
   'ultime':     { label:'Ultime',     color:'#22d3ee', gain:512  },
   'secret':     { label:'Secret',     color:'#d1d5db', gain:1024 },
+  'ancestral':  { label:'Ancestral',  color:'#a78bfa', gain:2048  },
+  'eternel':    { label:'Éternel',    color:'#f0abfc', gain:4096  },
+  'STI':        { label:'STI',        color:'#ffffff', gain:8192  },
 };
 
 const BRAINROTS = {
   'secret':     [{name:'Bombardiro Crocodilo',emoji:'🐊'},{name:'Flambardo Killiardo',emoji:'🌶️'}],
+  'ancestral':  [{name:'Bombardiro Crocodilo',emoji:'🐊'}],
+  'eternel':    [{name:'Bombardiro Crocodilo',emoji:'🐊'}],
+  'STI':        [{name:'Bombardiro Crocodilo',emoji:'🐊'}],
   'ultime':     [{name:'Tortuginni Kiwichini',emoji:'🐢'},{name:'Torrtuginni Dragonfrutinni',emoji:'🐢'},{name:'Tortuginni Watermelenini',emoji:'🍉'},{name:'Tortuginni Cocosini',emoji:'🥥'}],
   'divin':      [{name:'Caesarini Priestini',emoji:'⚔️'},{name:'Au Au Au Cactus Au',emoji:'🐕'},{name:'Gorillo Flammolo',emoji:'🦍'},{name:'Bastoneira Bicicleteira',emoji:'🎄'},{name:'Argitinosaurus Cactusini',emoji:'🦕'},{name:'Bombarzilla',emoji:'🦖'}],
   'mythique':   [{name:'Robotsini Sandini',emoji:'🤖'},{name:'Noo La Polizia',emoji:'💀'},{name:'Preguntini Chatgepetini',emoji:'🌀'},{name:'Spazio Polare',emoji:'🐻‍❄️'},{name:'Nooo My Hotspot',emoji:'📶'},{name:'Tigruli Oranguli',emoji:'🍊'},{name:'Arr Arr Arr Anomalirr',emoji:'📄'},{name:'Pepperonetta Tralalita',emoji:'🌶️'}],
@@ -601,7 +609,9 @@ const CHESTS = [
   {id:'rare',       name:'Coffre Rare',       price:100000,     emoji:'💎', proba:{'commun':30,'peu-commun':25,'rare':18,'tres-rare':13,'epique':10,'legendaire':4}},
   {id:'epique',     name:'Coffre Épique',     price:1000000,    emoji:'✨', proba:{'commun':25,'peu-commun':20,'rare':20,'tres-rare':15,'epique':12,'legendaire':6,'mythique':2}},
   {id:'mythique',   name:'Coffre Mythique',   price:100000000,  emoji:'🔥', proba:{'commun':20,'peu-commun':15,'rare':13,'tres-rare':12,'epique':18,'legendaire':10,'mythique':8,'divin':4}},
-  {id:'ultime',     name:'Coffre Ultime',     price:1000000000, emoji:'👑', proba:{'commun':10,'peu-commun':15,'rare':15,'tres-rare':15,'epique':15,'legendaire':10.5,'mythique':9,'divin':7,'ultime':3,'secret':0.5}},
+  {id:'ultime',     name:'Coffre Ultime',     price:1000000000,  emoji:'👑', proba:{'commun':10,'peu-commun':15,'rare':15,'tres-rare':15,'epique':15,'legendaire':10.5,'mythique':9,'divin':7,'ultime':3,'secret':0.5}},
+  {id:'universe',  name:'Coffre Universe',   price:10000000000, emoji:'🌌', proba:{'rare':25,'tres-rare':15,'epique':15,'legendaire':15.5,'mythique':13,'divin':10,'ultime':5,'secret':1,'ancestral':0.5}},
+  {id:'transcendant', name:'Coffre Transcendant', price:100000000000, emoji:'🌠', proba:{'epique':23.4,'legendaire':30,'mythique':20,'divin':15,'ultime':7,'secret':3,'ancestral':1,'eternel':0.5,'STI':0.1}},
 ];
 
 // ===== BOOST SYSTEM =====
@@ -631,7 +641,7 @@ function boostDesc(b) {
   if (b.type === 'price') return '-'+b.bonus+'% prix Coffre '+(b.target.charAt(0).toUpperCase()+b.target.slice(1))+' — '+b.uses+' ouvertures';
 }
 
-const RARITY_ORDER = ['secret','ultime','divin','mythique','legendaire','epique','tres-rare','rare','peu-commun','commun'];
+const RARITY_ORDER = ['STI','eternel','ancestral','secret','ultime','divin','mythique','legendaire','epique','tres-rare','rare','peu-commun','commun'];
 
 function fmt(n) {
   n = Math.floor(n);
@@ -1661,7 +1671,7 @@ function ShopScreen({coins, setScreen, onOpen, activeBoosts}) {
             onClick: () => setPickModal(chest)
           }, coins >= chest.price ? '🎁 Ouvrir !' : '🔒 Insuffisant'),
           React.createElement('div', {className:'chest-proba'},
-            Object.entries(chest.proba).map(([r,p]) => {
+            Object.entries(chest.proba).filter(([r]) => r !== 'STI').map(([r,p]) => {
               const isCommun = r === 'commun';
               const isBoostTarget = activeProbaBoost && r === activeProbaBoost.rarity;
               // reduction only applies if the chest has both commun AND the boost target rarity
